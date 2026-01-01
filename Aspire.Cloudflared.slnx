@@ -1,0 +1,5 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/Aspire.Cloudflared/Aspire.Cloudflared.csproj" />
+  </Folder>
+</Solution>
