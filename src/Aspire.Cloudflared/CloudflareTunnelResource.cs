@@ -2,7 +2,7 @@
 
 namespace Aspire.Cloudflared;
 
-public sealed class CloudflaredResource([ResourceName] string name) : ContainerResource(name)
+public sealed class CloudflareTunnelResource([ResourceName] string name) : ContainerResource(name)
 {
     public const string MetricsEndpointName = "metrics";
 

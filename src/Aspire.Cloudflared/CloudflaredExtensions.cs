@@ -3,13 +3,13 @@ using Aspire.Hosting.ApplicationModel;
 
 namespace Aspire.Cloudflared;
 
-public static class CloudflaredResourceExtensions
+public static class CloudflaredExtensions
 {
-    public static IResourceBuilder<CloudflaredResource> AddCloudflared(this IDistributedApplicationBuilder builder, 
+    public static IResourceBuilder<CloudflareTunnelResource> AddCloudflareTunnel(this IDistributedApplicationBuilder builder, 
         [ResourceName] string name,
         int? metricsPort = null)
     {
-        CloudflaredResource resource = new(name);
+        CloudflareTunnelResource resource = new(name);
 
 #pragma warning disable ASPIREINTERACTION001 // Type is for evaluation purposes only and is subject to change or removal in future updates. Suppress this diagnostic to proceed.
         var tokenParameter = builder
@@ -31,19 +31,19 @@ public static class CloudflaredResourceExtensions
             .WithImageRegistry(CloudflaredContainerImageTags.Registry)
             .WithHttpEndpoint(
                 port: metricsPort,
-                targetPort: CloudflaredResource.DefaultMetricsPort,
-                name: CloudflaredResource.MetricsEndpointName
+                targetPort: CloudflareTunnelResource.DefaultMetricsPort,
+                name: CloudflareTunnelResource.MetricsEndpointName
             )
             .WithHttpHealthCheck(
                 "/diag/tunnel",
-                endpointName: CloudflaredResource.MetricsEndpointName
+                endpointName: CloudflareTunnelResource.MetricsEndpointName
             )
             .WithArgs(
             [
                 "tunnel",
                 "--no-autoupdate",
                 "--metrics",
-                $"0.0.0.0:{CloudflaredResource.DefaultMetricsPort}",
+                $"0.0.0.0:{CloudflareTunnelResource.DefaultMetricsPort}",
                 "run",
                 "--token",
                 ReferenceExpression.Create($"{tokenParameter}")

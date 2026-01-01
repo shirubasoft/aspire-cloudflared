@@ -8,6 +8,6 @@ builder.AddDockerComposeEnvironment("compose");
 var helloWorld = builder.AddContainer("hello-world", "nginx", "alpine")
     .WithHttpEndpoint(targetPort: 80, name: "http");
 
-var cloudflared = builder.AddCloudflared("my-cloudflared");
+var cloudflareTunnel = builder.AddCloudflareTunnel("my-cloudflare-tunnel");
 
 builder.Build().Run();
