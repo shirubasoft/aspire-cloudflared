@@ -34,6 +34,10 @@ public static class CloudflaredResourceExtensions
                 targetPort: CloudflaredResource.DefaultMetricsPort,
                 name: CloudflaredResource.MetricsEndpointName
             )
+            .WithHttpHealthCheck(
+                "/diag/tunnel",
+                endpointName: CloudflaredResource.MetricsEndpointName
+            )
             .WithArgs(
             [
                 "tunnel",

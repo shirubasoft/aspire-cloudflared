@@ -4,6 +4,10 @@ var builder = DistributedApplication.CreateBuilder(args);
 
 builder.AddDockerComposeEnvironment("compose");
 
-builder.AddCloudflared("my-cloudflared");
+// Simple hello world web server using nginx
+var helloWorld = builder.AddContainer("hello-world", "nginx", "alpine")
+    .WithHttpEndpoint(targetPort: 80, name: "http");
+
+var cloudflared = builder.AddCloudflared("my-cloudflared");
 
 builder.Build().Run();
