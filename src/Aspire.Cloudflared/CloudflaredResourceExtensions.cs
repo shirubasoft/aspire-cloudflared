@@ -39,10 +39,10 @@ public static class CloudflaredResourceExtensions
                 "tunnel",
                 "--no-autoupdate",
                 "--metrics",
-                $"127.0.0.1:{CloudflaredResource.DefaultMetricsPort}",
+                $"0.0.0.0:{CloudflaredResource.DefaultMetricsPort}",
                 "run",
                 "--token",
-                tokenParameter
+                ReferenceExpression.Create($"{tokenParameter}")
             ]);
     }
 }
