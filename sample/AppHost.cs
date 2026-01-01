@@ -8,6 +8,12 @@ builder.AddDockerComposeEnvironment("compose");
 var helloWorld = builder.AddContainer("hello-world", "nginx", "alpine")
     .WithHttpEndpoint(targetPort: 80, name: "http");
 
-var cloudflareTunnel = builder.AddCloudflareTunnel("my-cloudflare-tunnel");
+// Create a Cloudflare tunnel with auto-creation enabled
+var cloudflareTunnel = builder.AddCloudflareTunnel("my-cloudflare-tunnel")
+    .WithAutoCreate();
+
+// Expose the nginx container through the Cloudflare tunnel
+// This will create a route from the specified hostname to the container's http endpoint
+helloWorld.WithCloudflareTunnel(cloudflareTunnel, hostname: "autocreated.shiruba.dev");
 
 builder.Build().Run();
