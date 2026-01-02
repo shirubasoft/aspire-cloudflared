@@ -11,11 +11,17 @@ A .NET Aspire integration for [Cloudflare Tunnels](https://developers.cloudflare
 
 ## Installation
 
-Add the `Aspire.Cloudflared` project reference to your AppHost project:
+Install the NuGet package in your AppHost project:
+
+```bash
+dotnet add package Aspire.Cloudflared
+```
+
+Or add it directly to your AppHost `.csproj` file:
 
 ```xml
 <ItemGroup>
-  <ProjectReference Include="path\to\Aspire.Cloudflared.csproj" IsAspireProjectResource="false" />
+  <PackageReference Include="Aspire.Cloudflared" Version="*" />
 </ItemGroup>
 ```
 
