@@ -9,8 +9,7 @@ var helloWorld = builder.AddContainer("hello-world", "nginx", "alpine")
     .WithHttpEndpoint(targetPort: 80, name: "http");
 
 // Create a Cloudflare tunnel with auto-creation enabled
-var cloudflareTunnel = builder.AddCloudflareTunnel("my-cloudflare-tunnel")
-    .WithAutoCreate();
+var cloudflareTunnel = builder.AddCloudflareTunnel("my-cloudflare-tunnel");
 
 // Expose the nginx container through the Cloudflare tunnel
 // This will create a route from the specified hostname to the container's http endpoint
