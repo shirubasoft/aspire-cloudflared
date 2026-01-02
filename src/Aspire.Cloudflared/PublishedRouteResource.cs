@@ -4,15 +4,20 @@ namespace Aspire.Cloudflared;
 
 /// <summary>
 /// Represents a published route through a Cloudflare tunnel.
-/// This resource is a child of <see cref="CloudflareTunnelResource"/> and tracks
-/// a specific hostname-to-endpoint mapping.
+/// This resource tracks a specific hostname-to-endpoint mapping and is associated
+/// with a <see cref="CloudflareTunnelResource"/> via a parent relationship.
 /// </summary>
+/// <remarks>
+/// This resource uses <see cref="Aspire.Hosting.ResourceBuilderExtensions.WithParentRelationship{T}"/>
+/// to establish the parent-child relationship with the tunnel resource, rather than implementing
+/// <see cref="IResourceWithParent{T}"/>.
+/// </remarks>
 public sealed class PublishedRouteResource(
     [ResourceName] string name,
     string hostname,
     EndpointReference targetEndpoint,
     CloudflareTunnelResource tunnel)
-    : Resource(name), IResourceWithParent<CloudflareTunnelResource>
+    : Resource(name), IResourceWithWaitSupport
 {
     /// <summary>
     /// Gets the public hostname for this route (e.g., "api.example.com").
@@ -25,7 +30,7 @@ public sealed class PublishedRouteResource(
     public EndpointReference TargetEndpoint { get; } = targetEndpoint;
 
     /// <summary>
-    /// Gets the parent Cloudflare tunnel resource.
+    /// Gets the Cloudflare tunnel resource that this route is associated with.
     /// </summary>
-    public CloudflareTunnelResource Parent { get; } = tunnel;
+    public CloudflareTunnelResource Tunnel { get; } = tunnel;
 }

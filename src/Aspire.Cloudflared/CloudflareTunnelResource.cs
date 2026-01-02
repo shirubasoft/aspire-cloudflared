@@ -2,11 +2,7 @@
 
 namespace Aspire.Cloudflared;
 
-public sealed class CloudflareTunnelResource([ResourceName] string name) : ContainerResource(name)
+public sealed class CloudflareTunnelResource([ResourceName] string name) : Resource(name)
 {
-    public const string MetricsEndpointName = "metrics";
 
-    public const int DefaultMetricsPort = 60123;
-
-    public EndpointReference MetricsEndpoint => field ??= new(this, MetricsEndpointName);
 }
