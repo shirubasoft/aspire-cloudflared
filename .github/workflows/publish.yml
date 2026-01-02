@@ -24,8 +24,7 @@ jobs:
   build:
     runs-on: ubuntu-latest
     outputs:
-      version: ${{ steps.nbgv.outputs.NuGetPackageVersion }}
-      is_public_release: ${{ steps.nbgv.outputs.PublicRelease }}
+      version: ${{ steps.nbgv.outputs.version }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -42,7 +41,9 @@ jobs:
 
       - name: Set version variables (nbgv cloud)
         id: nbgv
-        run: nbgv cloud --all-vars
+        run: |
+          nbgv cloud --all-vars
+          echo "version=$(nbgv get-version -v NuGetPackageVersion)" >> $GITHUB_OUTPUT
 
       - name: Restore dependencies
         run: dotnet restore src/Aspire.Cloudflared/Aspire.Cloudflared.csproj
