@@ -16,6 +16,7 @@ public sealed class CloudflareTunnelResource([ResourceName] string name) : Resou
 
     /// <summary>
     /// Gets or sets the tunnel token used to authenticate the cloudflared connection.
+    /// This is populated at runtime in run mode.
     /// </summary>
     public string? TunnelToken { get; internal set; }
 

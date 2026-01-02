@@ -2,7 +2,6 @@ using Aspire.Hosting;
 using Aspire.Hosting.ApplicationModel;
 using Aspire.Hosting.Eventing;
 using Aspire.Hosting.Lifecycle;
-using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 
 namespace Aspire.Cloudflared;
@@ -60,6 +59,12 @@ public static class CloudflaredExtensions
                 Description = p.Description,
                 Required = true
             });
+
+        // Tunnel token parameter - only used in publish mode
+        // In run mode, the token is obtained automatically by the installer
+        var tunnelTokenParameter = builder
+            .AddParameter($"{name}-tunnel-token", secret: true)
+            .WithDescription("The Cloudflare tunnel token. Get this from the Cloudflare dashboard or by running 'cloudflared tunnel token <tunnel-name>'.");
 #pragma warning restore ASPIREINTERACTION001
 
         // Create the tunnel resource
@@ -84,8 +89,7 @@ public static class CloudflaredExtensions
                 name: CloudflaredResource.MetricsEndpointName)
             .WithHttpHealthCheck(
                 "/ready",
-                endpointName: CloudflaredResource.MetricsEndpointName)
-            .WithArgs(context => GetTunnelArgsAsync(context, tunnelResource));
+                endpointName: CloudflaredResource.MetricsEndpointName);
 
         // Add the tunnel resource
         var tunnelBuilder = builder.AddResource(tunnelResource)
@@ -98,13 +102,18 @@ public static class CloudflaredExtensions
 
         if (builder.ExecutionContext.IsRunMode)
         {
-            // RUN MODE: Create installer resource that provisions the tunnel
+            // RUN MODE: Use default args - token passed via environment variable
+            containerBuilder.WithArgs(GetTunnelArgs);
+            // Create installer resource that provisions the tunnel
+            // The installer will set the TUNNEL_TOKEN environment variable after provisioning
             AddTunnelInstaller(builder, tunnelBuilder, containerBuilder, apiTokenParameter, accountIdParameter);
         }
         else
         {
-            // PUBLISH MODE: Provision tunnel during publish
-            AddPublishTimeProvisioning(builder, tunnelBuilder, apiTokenParameter, accountIdParameter);
+            // PUBLISH MODE: Use tunnel token parameter passed as environment variable
+            // User must provide the token at deployment time
+            containerBuilder.WithArgs(GetTunnelArgs);
+            containerBuilder.WithEnvironment("TUNNEL_TOKEN", tunnelTokenParameter.Resource);
         }
 
         return tunnelBuilder;
@@ -172,6 +181,22 @@ public static class CloudflaredExtensions
         // Register the eventing subscriber to run the installer
         builder.Services.TryAddEventingSubscriber<CloudflareTunnelInstallerEventingSubscriber>();
 
+        // In run mode, set the TUNNEL_TOKEN environment variable from the provisioned token
+        container.WithEnvironment(context =>
+        {
+            // The token is set by the installer before the container starts
+            if (!string.IsNullOrEmpty(tunnel.Resource.TunnelToken))
+            {
+                context.EnvironmentVariables["TUNNEL_TOKEN"] = tunnel.Resource.TunnelToken;
+            }
+            else if (tunnel.Resource.TryGetLastAnnotation<TunnelTokenAnnotation>(out var tokenAnnotation))
+            {
+                context.EnvironmentVariables["TUNNEL_TOKEN"] = tokenAnnotation.Token;
+            }
+            // If no token is available yet, the WaitForCompletion below ensures
+            // this callback runs after the installer has set the token
+        });
+
         // Make the container wait for the installer to complete
         container.WaitForCompletion(installerBuilder);
     }
@@ -219,157 +244,17 @@ public static class CloudflaredExtensions
         }
     }
 
-    private static void AddPublishTimeProvisioning(
-        IDistributedApplicationBuilder builder,
-        IResourceBuilder<CloudflareTunnelResource> tunnel,
-        IResourceBuilder<ParameterResource> apiToken,
-        IResourceBuilder<ParameterResource> accountId)
-    {
-        // In publish mode, we provision during the publish operation
-        // The tunnel token will be stored as a parameter that gets resolved at deployment time
-        builder.Eventing.Subscribe<BeforeStartEvent>(async (evt, ct) =>
-        {
-            var logger = evt.Services.GetRequiredService<ILogger<CloudflareTunnelResource>>();
-
-            try
-            {
-                var token = await apiToken.Resource.GetValueAsync(ct);
-                var account = await accountId.Resource.GetValueAsync(ct);
-
-                if (string.IsNullOrEmpty(token) || string.IsNullOrEmpty(account))
-                {
-                    logger.LogWarning("Cloudflare API credentials not available during publish. Tunnel must be pre-provisioned.");
-                    return;
-                }
-
-                using var client = new CloudflareApiClient(token, account);
-
-                // Find or create the tunnel
-                var existingTunnel = await client.FindTunnelByNameAsync(tunnel.Resource.Name, ct);
-
-                if (existingTunnel is null)
-                {
-                    logger.LogInformation("Creating Cloudflare tunnel '{TunnelName}'...", tunnel.Resource.Name);
-                    existingTunnel = await client.CreateTunnelAsync(tunnel.Resource.Name, ct);
-                    logger.LogInformation("Created tunnel with ID {TunnelId}", existingTunnel.Id);
-                }
-                else
-                {
-                    logger.LogInformation("Found existing tunnel '{TunnelName}' with ID {TunnelId}", tunnel.Resource.Name, existingTunnel.Id);
-                }
-
-                tunnel.Resource.TunnelId = existingTunnel.Id;
-
-                // Get the tunnel token
-                var tunnelToken = await client.GetTunnelTokenAsync(existingTunnel.Id, ct);
-                tunnel.Resource.TunnelToken = tunnelToken;
-
-                // Configure routes
-                await ConfigureRoutesAsync(client, tunnel.Resource, logger, ct);
-            }
-            catch (Exception ex)
-            {
-                logger.LogError(ex, "Failed to provision Cloudflare tunnel during publish");
-                throw;
-            }
-        });
-    }
-
-    private static async Task ConfigureRoutesAsync(
-        CloudflareApiClient client,
-        CloudflareTunnelResource tunnel,
-        ILogger logger,
-        CancellationToken ct)
-    {
-        if (tunnel.TunnelId is null)
-        {
-            return;
-        }
-
-        var pendingRoutes = tunnel.Annotations.OfType<PendingRouteAnnotation>().ToList();
-        if (pendingRoutes.Count == 0)
-        {
-            return;
-        }
-
-        // Build ingress configuration
-        var config = new TunnelConfiguration();
-
-        foreach (var route in pendingRoutes)
-        {
-            // Extract domain from hostname for zone lookup
-            var domain = GetRootDomain(route.Hostname);
-            var zone = await client.FindZoneByNameAsync(domain, ct);
-
-            if (zone is null)
-            {
-                throw new InvalidOperationException(
-                    $"Could not find zone for domain '{domain}'. DNS record cannot be created for '{route.Hostname}'. " +
-                    "Make sure the domain is registered in your Cloudflare account and the API token has Zone:Read permission.");
-            }
-
-            logger.LogInformation("Creating DNS record for {Hostname}...", route.Hostname);
-            await client.CreateTunnelDnsRecordAsync(zone.Id, route.Hostname, tunnel.TunnelId, cancellationToken: ct);
-
-            // Add ingress rule (service URL will be resolved at runtime)
-            config.Ingress.Add(new IngressRule
-            {
-                Hostname = route.Hostname,
-                Service = $"http://{route.TargetResource.Name}:{GetDefaultPort(route.TargetEndpoint)}"
-            });
-        }
-
-        // Add catch-all rule (required by Cloudflare)
-        config.Ingress.Add(new IngressRule
-        {
-            Service = "http_status:404"
-        });
-
-        logger.LogInformation("Updating tunnel configuration with {RouteCount} routes...", pendingRoutes.Count);
-        await client.UpdateTunnelConfigurationAsync(tunnel.TunnelId, config, ct);
-    }
-
-    private static string GetRootDomain(string hostname)
-    {
-        var parts = hostname.Split('.');
-        if (parts.Length >= 2)
-        {
-            return string.Join(".", parts.TakeLast(2));
-        }
-        return hostname;
-    }
-
-    private static int GetDefaultPort(EndpointReference endpoint)
-    {
-        // Try to get the target port from the endpoint
-        // Default to 80 for http, 443 for https
-        return 80;
-    }
-
-    private static async Task GetTunnelArgsAsync(CommandLineArgsCallbackContext context, CloudflareTunnelResource tunnelResource)
+    /// <summary>
+    /// Gets the command-line arguments for running cloudflared tunnel.
+    /// The tunnel token is passed via TUNNEL_TOKEN environment variable, not command-line args.
+    /// </summary>
+    private static void GetTunnelArgs(CommandLineArgsCallbackContext context)
     {
         context.Args.Add("tunnel");
         context.Args.Add("--no-autoupdate");
         context.Args.Add("--metrics");
         context.Args.Add($"0.0.0.0:{CloudflaredResource.DefaultMetricsPort}");
         context.Args.Add("run");
-        context.Args.Add("--token");
-
-        // Get the token from the tunnel resource
-        if (!string.IsNullOrEmpty(tunnelResource.TunnelToken))
-        {
-            context.Args.Add(tunnelResource.TunnelToken);
-        }
-        else if (tunnelResource.TryGetLastAnnotation<TunnelTokenAnnotation>(out var tokenAnnotation))
-        {
-            context.Args.Add(tokenAnnotation.Token);
-        }
-        else
-        {
-            throw new InvalidOperationException($"Tunnel token not available for tunnel '{tunnelResource.Name}'. Ensure the tunnel installer has completed.");
-        }
-
-        await Task.CompletedTask;
     }
 }
 
