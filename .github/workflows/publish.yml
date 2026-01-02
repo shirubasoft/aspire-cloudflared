@@ -1,0 +1,126 @@
+name: Build and Publish NuGet Package
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+  workflow_dispatch:
+    inputs:
+      release:
+        description: 'Create a release (tag and publish to NuGet)'
+        required: false
+        type: boolean
+        default: false
+
+env:
+  DOTNET_SKIP_FIRST_TIME_EXPERIENCE: 1
+  DOTNET_NOLOGO: true
+  NUGET_DIRECTORY: ${{ github.workspace }}/nuget
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.nbgv.outputs.NuGetPackageVersion }}
+      is_public_release: ${{ steps.nbgv.outputs.PublicRelease }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # Required for nbgv to compute version from git history
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Install nbgv tool
+        run: dotnet tool install --global nbgv
+
+      - name: Set version variables (nbgv cloud)
+        id: nbgv
+        run: nbgv cloud --all-vars
+
+      - name: Restore dependencies
+        run: dotnet restore src/Aspire.Cloudflared/Aspire.Cloudflared.csproj
+
+      - name: Build
+        run: dotnet build src/Aspire.Cloudflared/Aspire.Cloudflared.csproj --configuration Release --no-restore
+
+      - name: Pack
+        run: dotnet pack src/Aspire.Cloudflared/Aspire.Cloudflared.csproj --configuration Release --no-build --output ${{ env.NUGET_DIRECTORY }}
+
+      - name: Upload NuGet package artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: nuget
+          if-no-files-found: error
+          retention-days: 7
+          path: ${{ env.NUGET_DIRECTORY }}/*.nupkg
+
+      - name: Upload symbol package artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: nuget-symbols
+          if-no-files-found: warn
+          retention-days: 7
+          path: ${{ env.NUGET_DIRECTORY }}/*.snupkg
+
+  release:
+    if: github.event_name == 'workflow_dispatch' && github.event.inputs.release == 'true' && github.ref == 'refs/heads/main'
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Install nbgv tool
+        run: dotnet tool install --global nbgv
+
+      - name: Create release tag
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          nbgv tag
+          git push --tags
+
+      - name: Download NuGet package artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: nuget
+          path: ${{ env.NUGET_DIRECTORY }}
+
+      - name: Download symbol package artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: nuget-symbols
+          path: ${{ env.NUGET_DIRECTORY }}
+
+      - name: Publish to NuGet.org
+        run: |
+          foreach($file in (Get-ChildItem "${{ env.NUGET_DIRECTORY }}" -Recurse -Include *.nupkg)) {
+              dotnet nuget push $file --api-key "${{ secrets.NUGET_API_KEY }}" --source https://api.nuget.org/v3/index.json --skip-duplicate
+          }
+        shell: pwsh
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ needs.build.outputs.version }}
+          name: Release v${{ needs.build.outputs.version }}
+          generate_release_notes: true
+          files: |
+            ${{ env.NUGET_DIRECTORY }}/*.nupkg
+            ${{ env.NUGET_DIRECTORY }}/*.snupkg

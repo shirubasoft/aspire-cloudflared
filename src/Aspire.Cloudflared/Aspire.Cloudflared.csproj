@@ -4,10 +4,34 @@
     <TargetFramework>net10.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
+    
+    <!-- NuGet Package Properties -->
+    <PackageId>Shirubasoft.Aspire.Cloudflared</PackageId>
+    <Authors>Daniel Reis</Authors>
+    <Description>Aspire integration for Cloudflare Tunnels (cloudflared). Easily add cloudflared containers to your .NET Aspire application to expose services through Cloudflare Tunnels.</Description>
+    <Copyright>Copyright (c) 2026 shirubasoft</Copyright>
+    <PackageTags>aspire cloudflare cloudflared tunnel dotnet container orchestration networking</PackageTags>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <PackageProjectUrl>https://github.com/shirubasoft/aspire-cloudflared</PackageProjectUrl>
+    <RepositoryUrl>https://github.com/shirubasoft/aspire-cloudflared</RepositoryUrl>
+    <RepositoryType>git</RepositoryType>
+    
+    <!-- Source Link for better debugging -->
+    <PublishRepositoryUrl>true</PublishRepositoryUrl>
+    <EmbedUntrackedSources>true</EmbedUntrackedSources>
+    <IncludeSymbols>true</IncludeSymbols>
+    <SymbolPackageFormat>snupkg</SymbolPackageFormat>
   </PropertyGroup>
 
   <ItemGroup>
+    <None Include="../../README.md" Pack="true" PackagePath="/" />
+  </ItemGroup>
+
+  <ItemGroup>
     <PackageReference Include="Aspire.Hosting" Version="13.1.0" />
+    <PackageReference Include="Microsoft.SourceLink.GitHub" Version="8.0.0" PrivateAssets="All" />
+    <PackageReference Include="Nerdbank.GitVersioning" Version="3.9.50" PrivateAssets="all" />
   </ItemGroup>
 
 </Project>
