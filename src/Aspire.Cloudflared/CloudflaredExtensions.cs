@@ -144,7 +144,7 @@ public static class CloudflaredExtensions
         tunnelResource.Annotations.Add(new TunnelInitializerAnnotation(initializerResource));
 
         // Make the tunnel container wait for the initializer
-        builder.WaitFor(initializerBuilder);
+        //builder.WaitFor(initializerBuilder);
 
         return builder;
     }
